@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Tuple
+import os
 
 from gh_code_scanning import create_clients
 from gh_code_scanning.exceptions import GitHubApiError, GitHubNotFoundError
@@ -119,11 +120,21 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--owner", default="Notoriousjayy")
     ap.add_argument("--state", default="open")
-    ap.add_argument("--write-md", default="out/code_scanning_triage.md")
+    ap.add_argument("--write-md", default="code_scanning_triage.md")
     ap.add_argument("--update-issue", action="store_true")
     ap.add_argument("--issue-repo", default="Notoriousjayy/ghas-code-scanning-toolkit")
     ap.add_argument("--issue-title", default="Automated Code Scanning Triage")
     args = ap.parse_args()
+
+    base_output_dir = "out"
+    # Normalize the requested output path and ensure it stays within base_output_dir.
+    requested_path = os.path.normpath(args.write_md)
+    # Disallow absolute paths or traversal outside the base directory.
+    if os.path.isabs(requested_path) or os.pardir in requested_path.split(os.sep):
+        safe_filename = "code_scanning_triage.md"
+    else:
+        safe_filename = os.path.basename(requested_path) or "code_scanning_triage.md"
+    write_path = os.path.normpath(os.path.join(base_output_dir, safe_filename))
 
     rest, cs = create_clients()
 
@@ -160,16 +171,16 @@ def main() -> int:
     md = render_markdown_report(args.owner, scanned, skipped_no_analysis, per_repo_counts, top_alerts)
 
     # write report
-    import os
-    os.makedirs(os.path.dirname(args.write_md), exist_ok=True)
-    with open(args.write_md, "w", encoding="utf-8") as f:
+    output_dir = os.path.dirname(write_path) or "."
+    os.makedirs(output_dir, exist_ok=True)
+    with open(write_path, "w", encoding="utf-8") as f:
         f.write(md)
 
     if args.update_issue:
         issue_owner, issue_repo = args.issue_repo.split("/", 1)
         upsert_issue(rest, issue_owner, issue_repo, args.issue_title, md, labels=["security", "code-scanning", "triage"])
 
-    print(f"Wrote: {args.write_md}")
+    print(f"Wrote: {write_path}")
     if args.update_issue:
         print(f"Updated issue: {args.issue_repo} -> {args.issue_title}")
     return 0
