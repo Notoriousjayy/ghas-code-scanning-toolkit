@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from gh_code_scanning.exceptions import GitHubNotFoundError
+
 
 import argparse
 import datetime as dt
@@ -73,7 +75,16 @@ def main() -> int:
     rest, cs = create_clients()
     now = dt.datetime.now(tz=dt.timezone.utc)
 
-    alerts = cs.list_alerts_for_repo(args.owner, args.repo, state="open", per_page=100)
+    try:
+        alerts = cs.list_alerts_for_repo(args.owner, args.repo, state="open", per_page=100)
+    except GitHubNotFoundError as e:
+        # GitHub returns 404 "no analysis found" when code scanning has never produced results.
+        msg = str(e).lower()
+        if "no analysis found" in msg:
+            print(f"No code scanning analysis found for {args.owner}/{args.repo}; skipping.")
+            return 0
+        raise
+
 
     breached: List[AlertRef] = []
     for a in alerts:
