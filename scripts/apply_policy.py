@@ -66,7 +66,12 @@ def main() -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    cfg = json.loads(Path(args.config).read_text(encoding="utf-8"))
+    config_path = Path(args.config).expanduser().resolve()
+    if not config_path.is_file():
+        log.error("Configuration file does not exist or is not a file: %s", config_path)
+        return 1
+
+    cfg = json.loads(config_path.read_text(encoding="utf-8"))
 
     rest, _ = create_clients()
     sec = RepoSecurityClient(rest)
