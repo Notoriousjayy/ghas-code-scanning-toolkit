@@ -1,0 +1,36 @@
+{
+  "scope": { "type": "user", "name": "Notoriousjayy" },
+
+  "filters": {
+    "exclude_archived": true,
+    "exclude_forks": true,
+    "include_private": true,
+    "include_public": true,
+    "include_regex": null,
+    "exclude_regex": null
+  },
+
+  "security_and_analysis": {
+    "advanced_security": "enabled",
+    "code_security": "enabled",
+    "secret_scanning": "enabled",
+    "secret_scanning_push_protection": "enabled"
+  },
+
+  "code_scanning_default_setup": {
+    "enabled": true,
+    "query_suite": "default",
+    "threat_model": "remote_and_local",
+    "runner_type": "standard",
+    "languages": null
+  },
+
+  "reporting": {
+    "write_json": "out/policy_apply.json",
+    "write_md": "out/policy_apply.md",
+    "update_issue": false,
+    "issue_repo": "Notoriousjayy/ghas-code-scanning-toolkit",
+    "issue_title": "Automated GHAS Policy Apply",
+    "issue_labels": ["security", "code-scanning", "policy"]
+  }
+}
