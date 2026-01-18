@@ -1,144 +1,173 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from gh_code_scanning.exceptions import GitHubNotFoundError
-
 
 import argparse
 import datetime as dt
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+import logging
+from typing import Any, Dict, List, Optional
 
 from gh_code_scanning import create_clients
-from gh_code_scanning.exceptions import GitHubApiError
-from gh_code_scanning.types import Severity
+from gh_code_scanning.exceptions import GitHubApiError, GitHubNotFoundError
 
-ISO = "%Y-%m-%dT%H:%M:%SZ"
+log = logging.getLogger("escalate_sla_to_issues")
 
-@dataclass(frozen=True)
-class AlertRef:
-    number: int
-    severity: str
-    created_at: str
-    html_url: str
-    rule_id: str
 
-def _parse_ts(s: str) -> dt.datetime:
-    return dt.datetime.strptime(s, ISO).replace(tzinfo=dt.timezone.utc)
+def parse_iso8601(s: str) -> dt.datetime:
+    # GitHub timestamps are typically like "2026-01-18T23:08:17Z"
+    return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(dt.timezone.utc)
 
-def _age_days(created_at: str, now: dt.datetime) -> int:
-    return (now - _parse_ts(created_at)).days
 
-def upsert_issue(
-    rest,
-    owner: str,
-    repo: str,
-    title: str,
-    body: str,
-    labels: List[str],
-) -> int:
-    # Find existing open issue by exact title
+def utcnow() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def severity_of(alert: Dict[str, Any]) -> str:
+    rule = alert.get("rule") or {}
+    sev = (
+        alert.get("security_severity_level")
+        or rule.get("security_severity_level")
+        or rule.get("severity")
+        or alert.get("severity")
+        or "unknown"
+    )
+    return str(sev).strip().lower()
+
+
+def created_at_of(alert: Dict[str, Any]) -> Optional[dt.datetime]:
+    raw = alert.get("created_at")
+    if raw:
+        try:
+            return parse_iso8601(str(raw))
+        except Exception:
+            return None
+    return None
+
+
+def build_issue_body(owner: str, repo: str, breaches: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    lines.append("# SLA Escalation: Code Scanning (High/Critical)")
+    lines.append("")
+    lines.append(f"Repository: `{owner}/{repo}`")
+    lines.append(f"Generated: `{utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}`")
+    lines.append("")
+    lines.append("## Breaching alerts")
+    lines.append("")
+    lines.append("| Severity | Alert | Created | Age (days) |")
+    lines.append("|---|---:|---|---:|")
+    for b in breaches:
+        sev = b["severity"]
+        num = b["number"]
+        url = b.get("html_url") or ""
+        created = b.get("created_at") or ""
+        age = b["age_days"]
+        lines.append(f"| `{sev}` | [{num}]({url}) | `{created}` | `{age:.2f}` |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def upsert_issue(rest, owner: str, repo: str, title: str, body: str) -> None:
+    # Find existing open issue with exact title
     issues = rest.request(
         "GET",
         f"/repos/{owner}/{repo}/issues",
         params={"state": "open", "per_page": 100},
     ).json()
 
-    for it in issues:
-        if it.get("pull_request"):
-            continue
-        if it.get("title") == title:
-            num = it["number"]
-            rest.request(
-                "PATCH",
-                f"/repos/{owner}/{repo}/issues/{num}",
-                json_body={"body": body, "labels": labels},
-            )
-            return num
+    existing = None
+    if isinstance(issues, list):
+        for it in issues:
+            if isinstance(it, dict) and it.get("title") == title and "pull_request" not in it:
+                existing = it
+                break
+
+    if existing:
+        num = existing["number"]
+        rest.request(
+            "PATCH",
+            f"/repos/{owner}/{repo}/issues/{num}",
+            json_body={"body": body},
+        )
+        log.info("Updated issue #%s: %s", num, existing.get("html_url"))
+        return
 
     created = rest.request(
         "POST",
         f"/repos/{owner}/{repo}/issues",
-        json_body={"title": title, "body": body, "labels": labels},
+        json_body={"title": title, "body": body},
     ).json()
-    return int(created["number"])
+    log.info("Created issue: %s", created.get("html_url"))
+
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Escalate SLA-breaching code scanning alerts into GitHub Issues.")
+    ap = argparse.ArgumentParser(description="Escalate code scanning alerts that breach SLA to a GitHub issue.")
     ap.add_argument("--owner", required=True)
     ap.add_argument("--repo", required=True)
-    ap.add_argument("--sla-high-days", type=int, default=14)
-    ap.add_argument("--sla-critical-days", type=int, default=7)
+    ap.add_argument("--sla-critical-days", type=float, default=7.0)
+    ap.add_argument("--sla-high-days", type=float, default=14.0)
     ap.add_argument("--top", type=int, default=25)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
     rest, cs = create_clients()
-    now = dt.datetime.now(tz=dt.timezone.utc)
 
     try:
         alerts = cs.list_alerts_for_repo(args.owner, args.repo, state="open", per_page=100)
     except GitHubNotFoundError as e:
-        # GitHub returns 404 "no analysis found" when code scanning has never produced results.
-        msg = str(e).lower()
-        if "no analysis found" in msg:
+        if "no analysis found" in str(e).lower():
             print(f"No code scanning analysis found for {args.owner}/{args.repo}; skipping.")
             return 0
         raise
 
+    now = utcnow()
+    breaches: List[Dict[str, Any]] = []
 
-    breached: List[AlertRef] = []
     for a in alerts:
-        sev = (a.get("rule", {}) or {}).get("severity") or a.get("severity")  # tolerate payload variants
-        created_at = a.get("created_at")
-        url = a.get("html_url") or a.get("url")
-        num = int(a.get("number"))
-        rule_id = (a.get("rule", {}) or {}).get("id") or "unknown"
-
-        if not created_at or not url or not sev:
+        sev = severity_of(a)
+        if sev not in ("critical", "high"):
             continue
 
-        age = _age_days(created_at, now)
+        created_dt = created_at_of(a)
+        if not created_dt:
+            continue
 
-        if sev == "critical" and age >= args.sla_critical_days:
-            breached.append(AlertRef(num, sev, created_at, url, rule_id))
-        elif sev == "high" and age >= args.sla_high_days:
-            breached.append(AlertRef(num, sev, created_at, url, rule_id))
+        age_days = (now - created_dt).total_seconds() / 86400.0
+        threshold = args.sla_critical_days if sev == "critical" else args.sla_high_days
 
-    breached.sort(key=lambda x: x.created_at)  # oldest first
-    breached = breached[: max(args.top, 1)]
+        if age_days >= threshold:
+            breaches.append(
+                {
+                    "severity": sev,
+                    "number": int(a["number"]),
+                    "html_url": a.get("html_url"),
+                    "created_at": a.get("created_at"),
+                    "age_days": age_days,
+                }
+            )
 
-    if not breached:
+    breaches.sort(key=lambda x: (0 if x["severity"] == "critical" else 1, -x["age_days"]))
+
+    if not breaches:
         print("No SLA-breaching alerts found.")
         return 0
 
-    lines = [
-        f"# SLA Escalation: Code Scanning Alerts",
-        "",
-        f"- Repo: `{args.owner}/{args.repo}`",
-        f"- Generated: `{now.isoformat()}`",
-        f"- Thresholds: critical >= {args.sla_critical_days}d, high >= {args.sla_high_days}d",
-        "",
-        "## Oldest breaches",
-        "",
-        "| Age (days) | Severity | Alert # | Rule | Link |",
-        "|---:|---|---:|---|---|",
-    ]
-
-    for ar in breached:
-        age = _age_days(ar.created_at, now)
-        lines.append(f"| {age} | {ar.severity} | {ar.number} | `{ar.rule_id}` | {ar.html_url} |")
-
-    body = "\n".join(lines)
+    breaches = breaches[: args.top]
     title = "SLA Escalation: Code Scanning (High/Critical)"
-    labels = ["security", "code-scanning", "sla-breach"]
+    body = build_issue_body(args.owner, args.repo, breaches)
 
     if args.dry_run:
         print(body)
         return 0
 
-    issue_no = upsert_issue(rest, args.owner, args.repo, title, body, labels)
-    print(f"Escalation issue updated: #{issue_no}")
+    try:
+        upsert_issue(rest, args.owner, args.repo, title=title, body=body)
+    except GitHubApiError as e:
+        log.error("Failed to create/update issue: %s", e)
+        return 1
+
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
