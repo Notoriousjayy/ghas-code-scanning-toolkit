@@ -35,6 +35,3 @@ __all__ = [
     "GitHubNotFoundError",
     "GitHubRateLimitError",
 ]
-
-
-dd
