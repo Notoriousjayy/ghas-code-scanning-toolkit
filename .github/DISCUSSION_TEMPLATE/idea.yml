@@ -1,0 +1,13 @@
+title: "Idea"
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Describe the idea
+      description: Provide context, goals, and constraints.
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: Success criteria

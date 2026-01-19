@@ -1,0 +1,14 @@
+name: Reusable Dependency Review
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4

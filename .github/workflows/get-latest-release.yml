@@ -1,0 +1,27 @@
+name: Get Latest Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch latest release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            try {
+              const rel = await github.rest.repos.getLatestRelease({ owner, repo });
+              core.summary.addHeading('Latest Release')
+                .addRaw(`- Tag: ${rel.data.tag_name}\n- Name: ${rel.data.name || ''}\n- Published: ${rel.data.published_at}\n`)
+                .write();
+            } catch (e) {
+              core.summary.addHeading('Latest Release')
+                .addRaw('No releases found or insufficient permissions.')
+                .write();
+            }
