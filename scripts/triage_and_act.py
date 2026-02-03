@@ -150,7 +150,18 @@ def main() -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    rules = json.loads(Path(args.rules).read_text(encoding="utf-8"))
+    base_dir = Path(__file__).resolve().parent
+    rules_path = Path(args.rules)
+    if not rules_path.is_absolute():
+        rules_path = base_dir / rules_path
+    rules_path = rules_path.resolve()
+    try:
+        # Ensure the rules file is within the base directory
+        rules_path.relative_to(base_dir)
+    except ValueError:
+        raise ValueError(f"Rules file path '{rules_path}' is not allowed; it must be within '{base_dir}'")
+
+    rules = json.loads(rules_path.read_text(encoding="utf-8"))
     scope = rules["scope"]
     rest, cs = create_clients()
 
