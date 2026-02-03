@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Tuple
+import os
 
 from gh_code_scanning import create_clients
 from gh_code_scanning.exceptions import GitHubApiError, GitHubNotFoundError
@@ -160,16 +161,19 @@ def main() -> int:
     md = render_markdown_report(args.owner, scanned, skipped_no_analysis, per_repo_counts, top_alerts)
 
     # write report
-    import os
-    os.makedirs(os.path.dirname(args.write_md), exist_ok=True)
-    with open(args.write_md, "w", encoding="utf-8") as f:
+    base_dir = os.path.abspath(os.getcwd())
+    output_path = os.path.abspath(args.write_md)
+    if os.path.commonpath([base_dir, output_path]) != base_dir:
+        raise ValueError(f"Refusing to write report outside base directory: {output_path}")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(md)
 
     if args.update_issue:
         issue_owner, issue_repo = args.issue_repo.split("/", 1)
         upsert_issue(rest, issue_owner, issue_repo, args.issue_title, md, labels=["security", "code-scanning", "triage"])
 
-    print(f"Wrote: {args.write_md}")
+    print(f"Wrote: {output_path}")
     if args.update_issue:
         print(f"Updated issue: {args.issue_repo} -> {args.issue_title}")
     return 0
