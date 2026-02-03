@@ -1,0 +1,31 @@
+name: Dependency Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          config-file: .github/dependency-review-config.yml
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Dependency Review"
+            echo ""
+            echo "- Workflow: $GITHUB_WORKFLOW"
+            echo "- Run: $GITHUB_RUN_ID"
+            echo "- Ref: $GITHUB_REF"
+          } >> "$GITHUB_STEP_SUMMARY"

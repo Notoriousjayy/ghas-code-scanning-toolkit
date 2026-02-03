@@ -1,0 +1,4 @@
+name: Notoriousjayy/ghas-code-scanning-toolkit-codeql-pack
+version: 0.0.1
+library: true
+dependencies: {}
