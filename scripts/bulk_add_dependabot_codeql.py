@@ -89,7 +89,13 @@ def _sleep_backoff(attempt: int, base: float) -> None:
 
 
 def run_cmd(args: Sequence[str]) -> Tuple[int, str, str]:
-    p = subprocess.run(list(args), capture_output=True, text=True)
+    argv = list(args)
+    if not argv:
+        raise ValueError("Invalid command: empty argv")
+    if argv[0] != "gh":
+        raise ValueError(f"Invalid command: only 'gh' is allowed, got {argv[0]!r}")
+    safe_argv = ["gh"] + _validate_gh_args(argv[1:])
+    p = subprocess.run(safe_argv, capture_output=True, text=True)
     return p.returncode, p.stdout, p.stderr
 
 
@@ -411,6 +417,8 @@ def _validate_branch_name(branch: str) -> str:
     b = (branch or "").strip()
     if not b:
         raise ValueError("Invalid branch name: empty")
+    if len(b) > 255:
+        raise ValueError(f"Invalid branch name: {branch}")
     if b.startswith("/") or b.endswith("/") or "//" in b:
         raise ValueError(f"Invalid branch name: {branch}")
     if ".." in b or "@{" in b or "\\" in b:
@@ -418,6 +426,8 @@ def _validate_branch_name(branch: str) -> str:
     if any(ord(ch) < 32 or ch.isspace() for ch in b):
         raise ValueError(f"Invalid branch name: {branch}")
     if any(ch in b for ch in ['~', '^', ':', '?', '*', '[']):
+        raise ValueError(f"Invalid branch name: {branch}")
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", b):
         raise ValueError(f"Invalid branch name: {branch}")
     if b.endswith(".") or b.endswith(".lock"):
         raise ValueError(f"Invalid branch name: {branch}")
