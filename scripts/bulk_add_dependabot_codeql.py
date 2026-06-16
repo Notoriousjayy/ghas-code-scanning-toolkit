@@ -417,6 +417,8 @@ def _validate_branch_name(branch: str) -> str:
     b = (branch or "").strip()
     if not b:
         raise ValueError("Invalid branch name: empty")
+    if len(b) > 255:
+        raise ValueError(f"Invalid branch name: {branch}")
     if b.startswith("/") or b.endswith("/") or "//" in b:
         raise ValueError(f"Invalid branch name: {branch}")
     if ".." in b or "@{" in b or "\\" in b:
@@ -424,6 +426,8 @@ def _validate_branch_name(branch: str) -> str:
     if any(ord(ch) < 32 or ch.isspace() for ch in b):
         raise ValueError(f"Invalid branch name: {branch}")
     if any(ch in b for ch in ['~', '^', ':', '?', '*', '[']):
+        raise ValueError(f"Invalid branch name: {branch}")
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", b):
         raise ValueError(f"Invalid branch name: {branch}")
     if b.endswith(".") or b.endswith(".lock"):
         raise ValueError(f"Invalid branch name: {branch}")
