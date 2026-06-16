@@ -448,8 +448,9 @@ def get_head_commit_sha(owner: str, repo: str, branch: str) -> str:
 def create_branch(owner: str, repo: str, new_branch: str, base_branch: str, dry_run: bool) -> None:
     base_sha = get_head_commit_sha(owner, repo, base_branch)
 
-    existing = gh_json(["api", f"repos/{owner}/{repo}/git/ref/heads/{new_branch}"], allow_not_found=True)
-    if existing:
+    refs = gh_json(["api", f"repos/{owner}/{repo}/git/matching-refs/heads/"], allow_not_found=True) or []
+    wanted_ref = f"refs/heads/{new_branch}"
+    if any((ref or {}).get("ref") == wanted_ref for ref in refs):
         return
 
     if dry_run:
