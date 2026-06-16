@@ -151,11 +151,12 @@ def gh_json(args: List[str], allow_not_found: bool = False, *, max_retries: int 
 
     raise RuntimeError(f"gh command failed (exhausted retries): {' '.join(cmd)}")
 def gh_text(args: List[str], allow_not_found: bool = False) -> Optional[str]:
-    rc, out, err = run_cmd(["gh"] + args)
+    safe_args = _validate_gh_args(args)
+    rc, out, err = run_cmd(["gh"] + safe_args)
     if rc != 0:
         if allow_not_found and ("404" in err or "Not Found" in err):
             return None
-        raise RuntimeError(f"gh command failed ({rc}): gh {' '.join(args)}\n{err.strip()}")
+        raise RuntimeError(f"gh command failed ({rc}): gh {' '.join(safe_args)}\n{err.strip()}")
     return out
 
 
