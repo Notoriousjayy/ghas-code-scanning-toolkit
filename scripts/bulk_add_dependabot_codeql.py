@@ -391,6 +391,26 @@ def put_file(
 
         raise
 
+def _validate_branch_name(branch: str) -> str:
+    b = (branch or "").strip()
+    if not b:
+        raise ValueError("Invalid branch name: empty")
+    if b.startswith("/") or b.endswith("/") or "//" in b:
+        raise ValueError(f"Invalid branch name: {branch}")
+    if ".." in b or "@{" in b or "\\" in b:
+        raise ValueError(f"Invalid branch name: {branch}")
+    if any(ord(ch) < 32 or ch.isspace() for ch in b):
+        raise ValueError(f"Invalid branch name: {branch}")
+    if any(ch in b for ch in ['~', '^', ':', '?', '*', '[']):
+        raise ValueError(f"Invalid branch name: {branch}")
+    if b.endswith(".") or b.endswith(".lock"):
+        raise ValueError(f"Invalid branch name: {branch}")
+    parts = b.split("/")
+    if any((not p) or p.startswith(".") for p in parts):
+        raise ValueError(f"Invalid branch name: {branch}")
+    return b
+
+
 def get_head_commit_sha(owner: str, repo: str, branch: str) -> str:
     j = gh_json(["api", f"repos/{owner}/{repo}/git/ref/heads/{branch}"])
     sha = (j or {}).get("object", {}).get("sha")
@@ -1372,7 +1392,7 @@ def main() -> int:
     owner = _validate_owner(args.owner)
     include = normalize_include(args.include)
 
-    target_branch = args.branch or build_branch_name()
+    target_branch = _validate_branch_name(args.branch) if args.branch else build_branch_name()
 
     require_gh()
 
