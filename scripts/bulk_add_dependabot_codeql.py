@@ -157,10 +157,28 @@ def require_gh() -> None:
 # Repo discovery (fixes your 404)
 # -----------------------------
 
+_OWNER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+_REPO_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_owner(owner: str) -> str:
+    o = (owner or "").strip()
+    if not _OWNER_RE.fullmatch(o):
+        raise SystemExit(f"ERROR: Invalid owner value: {owner!r}")
+    return o
+
+
+def _validate_repo_name(repo: str) -> str:
+    r = (repo or "").strip()
+    if not r or r.startswith("-") or not _REPO_RE.fullmatch(r):
+        raise SystemExit(f"ERROR: Invalid repository name: {repo!r}")
+    return r
+
+
 def parse_repos_csv(arg: Optional[str]) -> Optional[Set[str]]:
     if not arg:
         return None
-    parts = [p.strip() for p in arg.split(",") if p.strip()]
+    parts = [_validate_repo_name(p.strip()) for p in arg.split(",") if p.strip()]
     return set(parts) if parts else None
 
 
@@ -1351,7 +1369,7 @@ def main() -> int:
 
     args = ap.parse_args()
 
-    owner = args.owner
+    owner = _validate_owner(args.owner)
     include = normalize_include(args.include)
 
     target_branch = args.branch or build_branch_name()
