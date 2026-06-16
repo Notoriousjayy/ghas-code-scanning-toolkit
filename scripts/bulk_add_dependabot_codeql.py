@@ -93,9 +93,24 @@ def run_cmd(args: Sequence[str]) -> Tuple[int, str, str]:
     return p.returncode, p.stdout, p.stderr
 
 
+def _validate_gh_args(args: Sequence[str]) -> List[str]:
+    """Validate/sanitize argv-style `gh` arguments before execution."""
+    safe_args: List[str] = []
+    for a in args:
+        if not isinstance(a, str):
+            raise ValueError("Invalid gh argument: non-string value")
+        if "\x00" in a or any(ord(ch) < 32 for ch in a):
+            raise ValueError(f"Invalid gh argument (control chars): {a!r}")
+        # Conservative allowlist covering current usage (api paths, flags, form fields, refs).
+        if not re.fullmatch(r"[A-Za-z0-9._~:/=@,+\-]+", a):
+            raise ValueError(f"Invalid gh argument (disallowed chars): {a!r}")
+        safe_args.append(a)
+    return safe_args
+
+
 def gh_json(args: List[str], allow_not_found: bool = False, *, max_retries: int = 3, backoff_base: float = 0.75) -> Any:
     """Run `gh ...` and parse JSON, with basic retries on transient failures."""
-    cmd = ["gh"] + args
+    cmd = ["gh"] + _validate_gh_args(args)
 
     for attempt in range(max_retries + 1):
         rc, out, err = run_cmd(cmd)
