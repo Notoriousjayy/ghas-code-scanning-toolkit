@@ -89,7 +89,13 @@ def _sleep_backoff(attempt: int, base: float) -> None:
 
 
 def run_cmd(args: Sequence[str]) -> Tuple[int, str, str]:
-    p = subprocess.run(list(args), capture_output=True, text=True)
+    argv = list(args)
+    if not argv:
+        raise ValueError("Invalid command: empty argv")
+    if argv[0] != "gh":
+        raise ValueError(f"Invalid command: only 'gh' is allowed, got {argv[0]!r}")
+    safe_argv = ["gh"] + _validate_gh_args(argv[1:])
+    p = subprocess.run(safe_argv, capture_output=True, text=True)
     return p.returncode, p.stdout, p.stderr
 
 
