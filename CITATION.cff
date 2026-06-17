@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it."
+title: "ghas-code-scanning-toolkit"
+type: software
+authors:
+  - name: "Notoriousjayy"
+date-released: "2026-01-19"
+url: "https://github.com/Notoriousjayy/ghas-code-scanning-toolkit"

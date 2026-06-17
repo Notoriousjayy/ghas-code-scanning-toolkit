@@ -1,0 +1,14 @@
+name: "CI Summary"
+description: "Write a standard run summary"
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        {
+          echo "## CI Summary"
+          echo ""
+          echo "- Workflow: $GITHUB_WORKFLOW"
+          echo "- Run: $GITHUB_RUN_ID"
+          echo "- Ref: $GITHUB_REF"
+        } >> "$GITHUB_STEP_SUMMARY"

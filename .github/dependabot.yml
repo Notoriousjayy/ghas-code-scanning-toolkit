@@ -1,0 +1,9 @@
+version: 2
+
+# registries:
+#   my-private-registry:
+#     type: npm-registry
+#     url: https://registry.npmjs.org
+#     token: ${{ secrets.DEPENDABOT_TOKEN }}
+
+updates:
